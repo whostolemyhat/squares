@@ -1,3 +1,6 @@
+// todo
+// display owned squares
+// add owner to edges
 use std::{
   collections::{HashMap, HashSet},
   fmt::Display,
@@ -13,7 +16,7 @@ enum GridError {
   SquareAlreadyOwned { user_id: usize },
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 struct Position {
   x: usize,
   y: usize,
@@ -26,7 +29,7 @@ struct Grid<'a> {
   // edges
   connections: HashSet<(&'a Position, &'a Position)>,
   // squares
-  owned: HashMap<&'a Position, usize>,
+  owned: HashMap<Position, usize>,
 }
 
 impl<'a> Grid<'a> {
@@ -79,7 +82,12 @@ impl<'a> Grid<'a> {
     self.neighbours(&first).contains(second)
   }
 
-  fn add_connection(&mut self, first: &'a Position, second: &'a Position) -> Result<(), GridError> {
+  fn add_connection(
+    &mut self,
+    first: &'a Position,
+    second: &'a Position,
+    user_id: usize,
+  ) -> Result<(), GridError> {
     println!("adding {first:?} {second:?}");
     println!("neighbours? {:?}", self.is_neighbour(&first, &second));
     println!(
@@ -97,30 +105,93 @@ impl<'a> Grid<'a> {
 
     self.connections.insert((first, second));
 
-    // TODO has this just made a square?
+    // has this just made a square?
     // is this horz or vert?
+    // horz: check squares below and above
+    let is_horz = first.x == second.x;
+    if is_horz {
+      if self.check_square(first) {
+        self.claim_square(first, user_id);
+      }
+      let square_below = Position {
+        x: first.x,
+        y: first.y - 1,
+      };
+      if self.check_square(&square_below) {
+        self.claim_square(&square_below, user_id);
+      }
+    } else {
+      // vert: check squares left and right
+      let left_square = Position {
+        x: first.x - 1,
+        y: first.y,
+      };
+      if self.check_square(&left_square) {
+        self.claim_square(&left_square, user_id);
+      }
+
+      let right_square = Position {
+        x: first.x + 1,
+        y: first.y,
+      };
+      if self.check_square(&right_square) {
+        self.claim_square(&right_square, user_id);
+      }
+    }
+
     // horz: take square first-second, second-second.y + 1, first.y+1 - second.y+1, first-first.y+1
     // vert: take square first-first.x+1, first.x+1-second.x+1,secod-second.x+1,first-second
     return Ok(());
   }
 
-  fn check_square(&self, square: &[Position; 4]) -> bool {
-    if self.connections.contains(&(&square[0], &square[1]))
-      && self.connections.contains(&(&square[1], &square[2]))
-      && self.connections.contains(&(&square[3], &square[2]))
-      && self.connections.contains(&(&square[0], &square[3]))
-    {
-      return true;
+  /// takes top-left corner and checks all edges
+  fn check_square(&self, top_left: &Position) -> bool {
+    // at edge
+    if top_left.x == self.width - 1 {
+      return false;
+    }
+    if top_left.y == self.height - 1 {
+      return false;
     }
 
-    false
+    return self.connections.contains(&(
+      &top_left,
+      &Position {
+        x: top_left.x + 1,
+        y: top_left.y,
+      },
+    )) && self.connections.contains(&(
+      &Position {
+        x: top_left.x + 1,
+        y: top_left.y,
+      },
+      &Position {
+        x: top_left.x + 1,
+        y: top_left.y + 1,
+      },
+    )) && self.connections.contains(&(
+      &Position {
+        x: top_left.x,
+        y: top_left.y + 1,
+      },
+      &Position {
+        x: top_left.x + 1,
+        y: top_left.y + 1,
+      },
+    )) && self.connections.contains(&(
+      &top_left,
+      &Position {
+        x: top_left.x,
+        y: top_left.y + 1,
+      },
+    ));
   }
 
-  fn claim_square(&mut self, square_space: &'a Position, user_id: usize) -> Result<(), GridError> {
+  fn claim_square(&mut self, square_space: &Position, user_id: usize) -> Result<(), GridError> {
     match self.owned.get(square_space) {
       Some(id) => return Err(GridError::SquareAlreadyOwned { user_id: *id }),
       None => {
-        self.owned.insert(square_space, user_id);
+        self.owned.insert(square_space.clone(), user_id);
         Ok(())
       }
     }
@@ -128,18 +199,8 @@ impl<'a> Grid<'a> {
 
   // TODO
   fn has_gaps(&self) -> bool {
-    // . .
-    // . . = 4 edges, 1 square 1x1
-
-    // . . .
-    // . . . = 7e, 2s = 1x2
-
-    // . . .
-    // . . .
-    // . . . = 12e, 4s = 2x2
-    // num sq = nxm
     let total_squares = self.width * self.height;
-    todo!()
+    return total_squares != self.owned.len();
   }
 }
 
@@ -183,23 +244,19 @@ fn main() {
   let mut grid = Grid::new(4, 5);
   println!("{grid}");
 
-  let _result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 0, y: 2 });
-  let _result = grid.add_connection(&Position { x: 0, y: 2 }, &Position { x: 0, y: 3 });
-  let result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 1, y: 1 });
+  let user_id = 1;
+  let _result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 0, y: 2 }, user_id);
+  let _result = grid.add_connection(&Position { x: 0, y: 2 }, &Position { x: 0, y: 3 }, user_id);
+  let result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 1, y: 1 }, user_id);
   println!("res {result:?}");
-  let result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 0, y: 2 });
+  let result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 0, y: 2 }, user_id);
   println!("res {result:?}");
-  let result = grid.add_connection(&Position { x: 10, y: 1 }, &Position { x: 0, y: 2 });
+  let result = grid.add_connection(&Position { x: 10, y: 1 }, &Position { x: 0, y: 2 }, user_id);
   println!("res {result:?}");
   println!("{grid}");
   println!("{grid:?}");
 
-  let is_square = grid.check_square(&[
-    Position { x: 0, y: 0 },
-    Position { x: 0, y: 1 },
-    Position { x: 0, y: 3 },
-    Position { x: 0, y: 4 },
-  ]);
+  let is_square = grid.check_square(&Position { x: 0, y: 0 });
   println!("{is_square}");
 }
 #[cfg(test)]
@@ -225,32 +282,32 @@ mod test {
   #[test]
   fn it_should_add_connection() {
     let mut grid = Grid::new(3, 4);
-    let result = grid.add_connection(&Position { x: 1, y: 1 }, &Position { x: 1, y: 2 });
+    let result = grid.add_connection(&Position { x: 1, y: 1 }, &Position { x: 1, y: 2 }, 2);
     assert!(result.is_ok());
 
-    let result = grid.add_connection(&Position { x: 1, y: 1 }, &Position { x: 2, y: 1 });
+    let result = grid.add_connection(&Position { x: 1, y: 1 }, &Position { x: 2, y: 1 }, 2);
     assert!(result.is_ok());
   }
 
   #[test]
   fn it_should_return_err_if_connection_exists() {
     let mut grid = Grid::new(3, 4);
-    let _result = grid.add_connection(&Position { x: 1, y: 1 }, &Position { x: 1, y: 2 });
-    let result = grid.add_connection(&Position { x: 1, y: 1 }, &Position { x: 1, y: 2 });
+    let _result = grid.add_connection(&Position { x: 1, y: 1 }, &Position { x: 1, y: 2 }, 2);
+    let result = grid.add_connection(&Position { x: 1, y: 1 }, &Position { x: 1, y: 2 }, 2);
     assert_eq!(result, Err(GridError::AlreadyExists));
   }
 
   #[test]
   fn it_should_return_err_if_position_out_of_grid() {
     let mut grid = Grid::new(3, 4);
-    let result = grid.add_connection(&Position { x: 25, y: 1 }, &Position { x: 1, y: 2 });
+    let result = grid.add_connection(&Position { x: 25, y: 1 }, &Position { x: 1, y: 2 }, 2);
     assert_eq!(result, Err(GridError::InvalidConnection));
   }
 
   #[test]
   fn it_should_return_err_if_not_neighbours() {
     let mut grid = Grid::new(3, 4);
-    let result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 2, y: 2 });
+    let result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 2, y: 2 }, 2);
     assert_eq!(result, Err(GridError::InvalidConnection));
   }
 
@@ -259,10 +316,10 @@ mod test {
     let mut grid = Grid::new(3, 4);
     assert_eq!(format!("{grid}"), ". . . \n. . . \n. . . \n. . . \n");
 
-    let _result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 0, y: 2 });
+    let _result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 0, y: 2 }, 2);
     assert_eq!(format!("{grid}"), ". . . \n. . . \n| . . \n. . . \n");
 
-    let _result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 1, y: 1 });
+    let _result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 1, y: 1 }, 2);
     assert_eq!(format!("{grid}"), ". . . \n.-. . \n| . . \n. . . \n");
   }
 
@@ -270,38 +327,17 @@ mod test {
   fn it_should_check_square() {
     let mut grid = Grid::new(3, 4);
     // left
-    let _result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 0, y: 2 });
+    let _result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 0, y: 2 }, 2);
     // top
-    let _result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 1, y: 1 });
+    let _result = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 1, y: 1 }, 2);
     // right
-    let _result = grid.add_connection(&Position { x: 1, y: 1 }, &Position { x: 1, y: 2 });
+    let _result = grid.add_connection(&Position { x: 1, y: 1 }, &Position { x: 1, y: 2 }, 2);
     // bottom
-    let _result = grid.add_connection(&Position { x: 0, y: 2 }, &Position { x: 1, y: 2 });
-    assert!(grid.check_square(&[
-      Position { x: 0, y: 1 },
-      Position { x: 1, y: 1 },
-      Position { x: 1, y: 2 },
-      Position { x: 0, y: 2 },
-    ]));
+    let _result = grid.add_connection(&Position { x: 0, y: 2 }, &Position { x: 1, y: 2 }, 2);
+    assert!(grid.check_square(&Position { x: 0, y: 1 }));
 
-    assert_eq!(
-      grid.check_square(&[
-        Position { x: 0, y: 1 },
-        Position { x: 1, y: 1 },
-        Position { x: 1, y: 2 },
-        Position { x: 1, y: 2 },
-      ]),
-      false
-    );
-    assert_eq!(
-      grid.check_square(&[
-        Position { x: 10, y: 1 },
-        Position { x: 1, y: 1 },
-        Position { x: 1, y: 2 },
-        Position { x: 0, y: 2 },
-      ]),
-      false
-    );
+    assert_eq!(grid.check_square(&Position { x: 1, y: 1 }), false);
+    assert_eq!(grid.check_square(&Position { x: 10, y: 1 }), false);
   }
 
   #[test]
@@ -309,16 +345,31 @@ mod test {
     let mut grid = Grid::new(3, 4);
     let _ = grid.claim_square(&Position { x: 0, y: 0 }, 1);
     let mut expected = HashMap::new();
-    expected.insert(&Position { x: 0, y: 0 }, 1);
+    expected.insert(Position { x: 0, y: 0 }, 1);
 
     assert_eq!(grid.owned, expected);
 
     let _ = grid.claim_square(&Position { x: 1, y: 0 }, 2);
-    expected.insert(&Position { x: 1, y: 0 }, 2);
+    expected.insert(Position { x: 1, y: 0 }, 2);
     assert_eq!(grid.owned, expected);
 
     let err = grid.claim_square(&Position { x: 0, y: 0 }, 2);
     assert_eq!(err, Err(GridError::SquareAlreadyOwned { user_id: 1 }));
+  }
+
+  #[test]
+  fn it_should_report_gaps() {
+    let mut grid = Grid::new(1, 1);
+    assert_eq!(grid.has_gaps(), true);
+
+    let _ = grid.claim_square(&Position { x: 0, y: 0 }, 12);
+
+    // let _ = grid.add_connection(&Position { x: 0, y: 0 }, &Position { x: 1, y: 0 });
+    // let _ = grid.add_connection(&Position { x: 0, y: 0 }, &Position { x: 0, y: 1 });
+    // let _ = grid.add_connection(&Position { x: 0, y: 1 }, &Position { x: 1, y: 1 });
+    // let _ = grid.add_connection(&Position { x: 1, y: 0 }, &Position { x: 1, y: 1 });
+
+    assert_eq!(grid.has_gaps(), false);
   }
 
   fn it_should_find_gaps() {}
