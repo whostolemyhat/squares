@@ -4,7 +4,7 @@ use std::{collections::HashMap, fmt::Display};
 
 #[derive(thiserror::Error, Debug, PartialEq)]
 pub enum GridError {
-  #[error("points not neighbors")]
+  #[error("points not neighbours")]
   InvalidConnection,
   #[error("connection already exists")]
   AlreadyExists,
@@ -192,7 +192,7 @@ impl Grid {
     }
   }
 
-  fn has_gaps(&self) -> bool {
+  pub fn has_gaps(&self) -> bool {
     let total_squares = self.width * self.height;
     return total_squares != self.owned.len();
   }
